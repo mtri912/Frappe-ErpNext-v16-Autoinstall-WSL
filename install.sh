@@ -150,6 +150,14 @@ apt-get install -y \
     cron
 echo -e "${GREEN}Core packages installed.${NC}"
 
+# Start Redis — handle both systemd and non-systemd WSL
+if systemctl is-system-running --wait 2>/dev/null | grep -qE "running|degraded"; then
+    systemctl enable redis-server
+    systemctl restart redis-server
+else
+    service redis-server start || true
+fi
+
 # ============================================================
 # PHASE 2: MARIADB 11.8
 # ============================================================
@@ -192,8 +200,9 @@ fi
 
 # Secure MariaDB installation (automated, no interactive prompts)
 echo -e "${BLUE}Securing MariaDB...${NC}"
+mariadb_password_sql="${mariadb_password//\'/\\\'}"
 mysql -u root << SQLEOF
-ALTER USER 'root'@'localhost' IDENTIFIED BY '${mariadb_password}';
+ALTER USER 'root'@'localhost' IDENTIFIED BY '${mariadb_password_sql}';
 DELETE FROM mysql.user WHERE User='';
 DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
 DROP DATABASE IF EXISTS test;
@@ -345,18 +354,18 @@ export PATH="\$HOME/.local/bin:\$HOME/.cargo/bin:\$PATH"
 
 cd "\$HOME/${BENCH_NAME}"
 
-echo "  Creating site: \$site_name..."
-bench new-site "\$site_name" \
-    --db-root-password "\$mariadb_password" \
-    --admin-password "\$admin_password"
+echo "  Creating site: ${site_name}..."
+bench new-site "${site_name}" \
+    --db-root-password "${mariadb_password}" \
+    --admin-password "${admin_password}"
 
-bench use "\$site_name"
+bench use "${site_name}"
 bench enable-scheduler
 bench set-config developer_mode 1
-bench --site "\$site_name" set-maintenance-mode off
-bench --site "\$site_name" clear-cache
+bench --site "${site_name}" set-maintenance-mode off
+bench --site "${site_name}" clear-cache
 
-echo "  Site '\$site_name' ready."
+echo "  Site '${site_name}' ready."
 SITEEOF
 
 echo -e "${GREEN}Site '${site_name}' created successfully.${NC}"
@@ -376,7 +385,7 @@ export PATH="\$HOME/.local/bin:\$HOME/.cargo/bin:\$PATH"
 
 cd "\$HOME/${BENCH_NAME}"
 bench get-app --branch version-16 erpnext
-bench --site "\$site_name" install-app erpnext
+bench --site "${site_name}" install-app erpnext
 echo "  ERPNext v16 installed."
 ERPEOF
     echo -e "${GREEN}ERPNext v16 installed.${NC}"
@@ -394,7 +403,7 @@ export PATH="\$HOME/.local/bin:\$HOME/.cargo/bin:\$PATH"
 
 cd "\$HOME/${BENCH_NAME}"
 bench get-app --branch version-16 hrms
-bench --site "\$site_name" install-app hrms
+bench --site "${site_name}" install-app hrms
 echo "  HRMS v16 installed."
 HRMSEOF
     echo -e "${GREEN}HRMS v16 installed.${NC}"
